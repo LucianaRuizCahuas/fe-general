@@ -14,30 +14,22 @@ const initial: Customer = {
 };
 
 export default function Customers() {
-
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [form, setForm] = useState<Customer>(initial);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // FILTRO
   const [filter, setFilter] = useState('all');
+  const [documentFilter, setDocumentFilter] = useState('all');
 
-  // CARGAR CLIENTES
   async function load() {
-
     setLoading(true);
 
     try {
-
       setCustomers(await customerApi.getAll());
-
     } catch {
-
       toast.error('No se pudo cargar clientes');
-
     } finally {
-
       setLoading(false);
     }
   }
@@ -46,32 +38,57 @@ export default function Customers() {
     load();
   }, []);
 
-  // FILTRAR CLIENTES
   const filteredCustomers = customers.filter(c => {
+    const stateMatch =
+      filter === 'all'
+        ? true
+        : filter === 'active'
+        ? c.estado
+        : !c.estado;
 
-    if (filter === 'active') return c.estado;
+    const documentMatch =
+      documentFilter === 'all'
+        ? true
+        : c.documentType === documentFilter;
 
-    if (filter === 'inactive') return !c.estado;
-
-    return true;
+    return stateMatch && documentMatch;
   });
 
-  // MANEJO INPUTS
   const change = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
-
     const { name, value } = e.target;
+
+    if (name === 'documentType') {
+      setForm({
+        ...form,
+        documentType: value,
+        nroDocument: '',
+      });
+      return;
+    }
+
+    if (name === 'nroDocument' && form.documentType === 'DNI') {
+      const onlyNumbers = value.replace(/\D/g, '');
+
+      if (value !== onlyNumbers) {
+        toast.error('El DNI solo permite números');
+      }
+
+      setForm({
+        ...form,
+        nroDocument: onlyNumbers.slice(0, 8),
+      });
+      return;
+    }
 
     setForm({
       ...form,
-      [name]: value
+      [name]: value,
     });
   };
 
-  // VALIDACIONES
   function validate() {
-
     if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{2,50}$/.test(form.firstName)) {
       return 'Nombre inválido';
     }
@@ -80,8 +97,24 @@ export default function Customers() {
       return 'Apellido inválido';
     }
 
-    if (!/^[a-zA-Z0-9]{6,15}$/.test(form.nroDocument)) {
-      return 'Documento inválido';
+    if (!['DNI', 'CE', 'PAS'].includes(form.documentType)) {
+      return 'Tipo de documento inválido';
+    }
+
+    if (form.documentType === 'DNI') {
+      if (!/^[0-9]+$/.test(form.nroDocument)) {
+        return 'El DNI solo debe contener números';
+      }
+
+      if (!/^[0-9]{8}$/.test(form.nroDocument)) {
+        return 'El DNI debe tener exactamente 8 dígitos';
+      }
+    }
+
+    if (form.documentType !== 'DNI') {
+      if (!/^[a-zA-Z0-9]{6,15}$/.test(form.nroDocument)) {
+        return 'Documento inválido';
+      }
     }
 
     if (!/^[0-9]{7,15}$/.test(form.phone)) {
@@ -95,9 +128,7 @@ export default function Customers() {
     return '';
   }
 
-  // GUARDAR / ACTUALIZAR
   async function save(e: React.FormEvent) {
-
     e.preventDefault();
 
     const error = validate();
@@ -109,95 +140,66 @@ export default function Customers() {
     setLoading(true);
 
     try {
-
       if (editingId) {
-
         await customerApi.update(editingId, form);
-
         toast.success('Cliente actualizado');
-
       } else {
-
         const { id: _id, ...payload } = form;
 
         await customerApi.create(payload);
-
         toast.success('Cliente creado');
       }
 
       reset();
-
       await load();
-
     } catch {
-
       toast.error('Error al guardar cliente');
-
     } finally {
-
       setLoading(false);
     }
   }
 
-  // EDITAR
   function edit(c: Customer) {
-
     setEditingId(c.id ?? null);
 
     setForm({
       ...initial,
-      ...c
+      ...c,
     });
 
     window.scrollTo({
       top: 0,
-      behavior: 'smooth'
+      behavior: 'smooth',
     });
   }
 
-  // LIMPIAR FORM
   function reset() {
-
     setEditingId(null);
-
     setForm(initial);
   }
 
-  // ACTIVAR / DESACTIVAR
   async function action(
     fn: () => Promise<unknown>,
     message: string
   ) {
-
     setLoading(true);
 
     try {
-
       await fn();
-
       toast.success(message);
-
       await load();
-
     } catch {
-
       toast.error('No se pudo completar la acción');
-
     } finally {
-
       setLoading(false);
     }
   }
 
   return (
-
     <section className="mx-auto max-w-7xl px-4 py-10">
 
-      {/* HEADER */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-
         <div>
-
           <h1 className="text-4xl font-black text-blue-950">
             Gestión de Clientes
           </h1>
@@ -205,37 +207,22 @@ export default function Customers() {
           <p className="text-slate-600">
             Migrado desde Angular a React con la misma conexión al backend.
           </p>
-
         </div>
 
-        <button
-          onClick={reset}
-          className="btn-primary"
-        >
+        <button onClick={reset} className="btn-primary">
           + Nuevo Cliente
         </button>
-
       </div>
 
-      {/* LOADING */}
       {loading && (
         <div className="loader-bar">
           Cargando...
         </div>
       )}
 
-      {/* FORMULARIO */}
-      <form
-        onSubmit={save}
-        className="card-pro mb-8"
-      >
-
+      <form onSubmit={save} className="card-pro mb-8">
         <h2 className="mb-5 text-2xl font-black text-blue-950">
-
-          {editingId
-            ? `Editando ID: ${editingId}`
-            : 'Nuevo Cliente'}
-
+          {editingId ? `Editando ID: ${editingId}` : 'Nuevo Cliente'}
         </h2>
 
         <div className="grid gap-4 md:grid-cols-3">
@@ -261,18 +248,16 @@ export default function Customers() {
           </Field>
 
           <Field label="Tipo Documento">
-
             <select
               name="documentType"
               value={form.documentType}
               onChange={change}
               className="input"
             >
-              <option>DNI</option>
-              <option>PAS</option>
-              <option>CE</option>
+              <option value="DNI">DNI</option>
+              <option value="CE">CE</option>
+              <option value="PAS">PAS</option>
             </select>
-
           </Field>
 
           <Field label="Número Documento">
@@ -281,6 +266,12 @@ export default function Customers() {
               value={form.nroDocument}
               onChange={change}
               className="input"
+              maxLength={form.documentType === 'DNI' ? 8 : 15}
+              placeholder={
+                form.documentType === 'DNI'
+                  ? 'Ingrese 8 dígitos'
+                  : 'Ingrese documento'
+              }
               required
             />
           </Field>
@@ -309,15 +300,11 @@ export default function Customers() {
         </div>
 
         <div className="mt-5 flex gap-3">
-
           <button className="btn-primary">
-
             {editingId ? 'Actualizar' : 'Guardar'}
-
           </button>
 
           {editingId && (
-
             <button
               type="button"
               onClick={reset}
@@ -325,15 +312,11 @@ export default function Customers() {
             >
               Cancelar
             </button>
-
           )}
-
         </div>
-
       </form>
 
-      {/* FILTRO */}
-      <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex justify-end gap-3">
 
         <select
           value={filter}
@@ -345,15 +328,22 @@ export default function Customers() {
           <option value="inactive">Inactivos</option>
         </select>
 
+        <select
+          value={documentFilter}
+          onChange={(e) => setDocumentFilter(e.target.value)}
+          className="input max-w-xs"
+        >
+          <option value="all">Todos los documentos</option>
+          <option value="DNI">DNI</option>
+          <option value="CE">CE</option>
+          <option value="PAS">PAS</option>
+        </select>
+
       </div>
 
-      {/* TABLA */}
       <div className="table-card">
-
         <table>
-
           <thead>
-
             <tr>
               <th>ID</th>
               <th>Cliente</th>
@@ -363,18 +353,14 @@ export default function Customers() {
               <th>Estado</th>
               <th>Acciones</th>
             </tr>
-
           </thead>
 
           <tbody>
-
             {filteredCustomers.map(c => (
-
               <tr
                 key={c.id}
                 className={!c.estado ? 'opacity-60' : ''}
               >
-
                 <td>{c.id}</td>
 
                 <td>
@@ -394,7 +380,6 @@ export default function Customers() {
                 </td>
 
                 <td className="actions">
-
                   <button
                     onClick={() => edit(c)}
                     className="btn-small"
@@ -403,7 +388,6 @@ export default function Customers() {
                   </button>
 
                   {c.estado ? (
-
                     <button
                       onClick={() =>
                         c.id &&
@@ -417,9 +401,7 @@ export default function Customers() {
                     >
                       Desactivar
                     </button>
-
                   ) : (
-
                     <button
                       onClick={() =>
                         c.id &&
@@ -432,19 +414,12 @@ export default function Customers() {
                     >
                       Restaurar
                     </button>
-
                   )}
-
                 </td>
-
               </tr>
-
             ))}
-
           </tbody>
-
         </table>
-
       </div>
 
     </section>
@@ -453,36 +428,27 @@ export default function Customers() {
 
 function Field({
   label,
-  children
+  children,
 }: {
   label: string;
   children: React.ReactNode;
 }) {
-
   return (
-
     <label className="grid gap-1 text-sm font-bold text-slate-700">
-
       {label}
-
       {children}
-
     </label>
   );
 }
 
 function Badge({
-  active
+  active,
 }: {
   active?: boolean;
 }) {
-
   return (
-
     <span className={active ? 'badge-ok' : 'badge-off'}>
-
       {active ? 'Activo' : 'Inactivo'}
-
     </span>
   );
 }
